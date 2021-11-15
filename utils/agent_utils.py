@@ -1,9 +1,4 @@
-import torch
 from torch import nn
-from torch.backends import cudnn
-from torch.autograd import Variable
-import math
-
 import importlib
 from torch import optim
 

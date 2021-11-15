@@ -1,10 +1,7 @@
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Subset
-
-
-
 from sklearn.model_selection import train_test_split
-from datasets.raw_audio_dataset import raw_audio_dataset
+from datasets.base_dataset import base_dataset
 
 class base_dataloader():
     """
@@ -20,7 +17,7 @@ class base_dataloader():
             self.train_iterations = 10
 
         print(f"Basic dataloader, data_mode : {args.dataset}, path : {self.config.img_dir}")
-        dataset = raw_audio_dataset(self.config.img_dir,self.config.annotation_file,self.config.input_dim,self.transform)
+        dataset = base_dataset(self.config.img_dir,self.config.annotation_file,self.config.input_dim,self.transform)
 
         train_indices, valid_indices = train_test_split(range(len(dataset)),test_size=self.config.valid_size,train_size=1-self.config.valid_size,
                                                         shuffle=False)

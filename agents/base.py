@@ -12,7 +12,6 @@ from datasets.base_dataloader import base_dataloader
 # import your classes here
 from utils.metrics import AverageMeter, cls_accuracy,compute_metrics
 from utils.misc import print_cuda_statistics
-from utils.agent_utils import adjust_learning_rate
 from utils.agent_utils import get_net,get_loss,get_optimizer
 # visualisation tool
 import wandb
