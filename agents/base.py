@@ -1,21 +1,21 @@
 """
 The Base Agent class, where all other agents inherit from, that contains definitions for all the necessary functions
 """
-import numpy as np
-from tqdm import tqdm
 import shutil
+from os import path
 
+import numpy as np
 import torch
-from torch.autograd import Variable
-from torch.optim.lr_scheduler import ExponentialLR
-from datasets.base_dataloader import base_dataloader
-# import your classes here
-from utils.metrics import AverageMeter, cls_accuracy,compute_metrics
-from utils.misc import print_cuda_statistics
-from utils.agent_utils import get_net,get_loss,get_optimizer
 # visualisation tool
 import wandb
-from os import path
+from datasets.base_dataloader import base_dataloader
+from torch.autograd import Variable
+from torch.optim.lr_scheduler import ExponentialLR
+from tqdm import tqdm
+from utils.agent_utils import get_loss, get_net, get_optimizer
+# import your classes here
+from utils.metrics import AverageMeter, cls_accuracy, compute_metrics
+from utils.misc import print_cuda_statistics
 
 
 class BaseAgent:
@@ -23,18 +23,18 @@ class BaseAgent:
     This base class will contain the base functions to be overloaded by any agent you will implement.
     """
 
-    def __init__(self, config,run):
+    def __init__(self, config, run):
         self.config = config
         self.model = get_net(config)
         print(self.model)
-        run.watch(self.model) # run is a wandb instance 
+        run.watch(self.model)  # run is a wandb instance
         self.data_loader = base_dataloader(self.config)
 
         # define loss
         self.loss = get_loss(config.loss)
 
         # define optimizers for both generator and discriminator
-        self.optimizer = get_optimizer(config,self.model)
+        self.optimizer = get_optimizer(config, self.model)
         self.scheduler = ExponentialLR(self.optimizer, gamma=0.9)
         # initialize counter
         self.current_epoch = 0
@@ -44,7 +44,7 @@ class BaseAgent:
         # set cuda flag
         self.is_cuda = torch.cuda.is_available()
         if self.is_cuda and not self.config.cuda:
-           print("WARNING: You have a CUDA device, so you should probably enable CUDA")
+            print("WARNING: You have a CUDA device, so you should probably enable CUDA")
 
         self.cuda = self.is_cuda & self.config.cuda
 
@@ -61,7 +61,6 @@ class BaseAgent:
 
         # Model Loading from the latest checkpoint if not found start from scratch.
         self.load_checkpoint(self.config.checkpoint_file)
-
 
     def load_checkpoint(self, filename):
         """
@@ -80,9 +79,10 @@ class BaseAgent:
             self.optimizer.load_state_dict(checkpoint['optimizer'])
 
             print("Checkpoint loaded successfully from '{}' at (epoch {}) at (iteration {})\n"
-                             .format(self.config.checkpoint_dir, checkpoint['epoch'], checkpoint['iteration']))
+                  .format(self.config.checkpoint_dir, checkpoint['epoch'], checkpoint['iteration']))
         except OSError as e:
-            print("No checkpoint exists from '{}'. Skipping...".format(self.config.checkpoint_dir))
+            print("No checkpoint exists from '{}'. Skipping...".format(
+                self.config.checkpoint_dir))
             print("**First time to train**")
 
     def save_checkpoint(self, filename="checkpoint.pth.tar", is_best=0):
@@ -125,20 +125,19 @@ class BaseAgent:
         :return:
         """
         max_epoch = self.config.max_epoch
-        if self.config.test_mode: 
+        if self.config.test_mode:
             max_epoch = 2
 
-        for epoch in range(self.current_epoch, min(max_epoch,self.config.max_epoch)):
+        for epoch in range(self.current_epoch, min(max_epoch, self.config.max_epoch)):
             self.current_epoch = epoch
             self.train_one_epoch()
             self.scheduler.step()
-            if epoch%self.config.validate_every==0 :
+            if epoch % self.config.validate_every == 0:
                 valid_acc = self.validate()
                 is_best = valid_acc > self.best_valid_acc
                 if is_best:
                     self.best_valid_acc = valid_acc
                 self.save_checkpoint(is_best=is_best)
-
 
     def train_one_epoch(self):
         """
@@ -146,24 +145,25 @@ class BaseAgent:
         uses tqdm to load data in parallel? Nope thats not true
         :return:
         """
-        if self.config.test_mode: 
+        if self.config.test_mode:
             self.data_loader.train_iterations = 10
 
         # tqdm bar
         tqdm_batch = tqdm(self.data_loader.train_loader, total=self.data_loader.train_iterations,
-                          desc="Epoch-{}-".format(self.current_epoch),leave=True)
+                          desc="Epoch-{}-".format(self.current_epoch), leave=True)
         # Set the model to be in training mode
         self.model.train()
         # Initialize your average meters
-        # epoch_loss = 
-        # top1_acc = 
+        # epoch_loss =
+        # top1_acc =
         current_batch = 0
         for x, y in tqdm_batch:
             if self.cuda:
-                x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(non_blocking=self.config.async_loading)
-            x, y = Variable(x), y.type(torch.long) # I don't even know why
-            
-            self.optimizer.zero_grad() 
+                x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(
+                    non_blocking=self.config.async_loading)
+            x, y = Variable(x), y.type(torch.long)  # I don't even know why
+
+            self.optimizer.zero_grad()
             # model
             pred = self.model(x)
             # loss
@@ -172,7 +172,7 @@ class BaseAgent:
             if np.isnan(float(cur_loss.item())):
                 raise ValueError('Loss is nan during training...')
             # optimizer
-            
+
             cur_loss.backward()
             self.optimizer.step()
 
@@ -186,16 +186,16 @@ class BaseAgent:
             current_batch += 1
 
             # logging in wand
-            wandb.log( {"epoch/loss": epoch_loss.val,"epoch/accuracy": top1_acc.val})
-            
-            if self.config.test_mode and current_batch == 11: 
+            wandb.log({"epoch/loss": epoch_loss.val,
+                      "epoch/accuracy": top1_acc.val})
+
+            if self.config.test_mode and current_batch == 11:
                 break
 
         tqdm_batch.close()
 
         print("Training at epoch-" + str(self.current_epoch) + " | " + "loss: " + str(
             epoch_loss.val) + "- Top1 Acc: " + str(top1_acc.val) + "- Top5 Acc: " + str(top5_acc.val))
-
 
     def validate(self):
         """
@@ -214,35 +214,36 @@ class BaseAgent:
         top1_acc = AverageMeter()
         top5_acc = AverageMeter()
         # iou = IOUMetric(self.config.num_classes)
-        current_batch = 0 
+        current_batch = 0
         for x, y in tqdm_batch:
             if self.cuda:
-                x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(non_blocking=self.config.async_loading)
+                x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(
+                    non_blocking=self.config.async_loading)
 
             x, y = Variable(x), y
             pred = self.model(x)
             cur_loss = self.loss(pred, y)
             if np.isnan(float(cur_loss.item())):
                 raise ValueError('Loss is nan during validation...')
-            
+
             # should I really use .cpu()?????????? @TODO
             top1 = cls_accuracy(pred.detach().cpu(), y.detach().cpu())
             # raiou.add_batch(x, y)
             epoch_loss.update(cur_loss.item())
-            top1_acc.update(top1[0].item(), x.size(0))    
-            # update visualization        
-            output = torch.argmax(pred,dim=1)
-            dic = compute_metrics(output.cpu(),y.detach().cpu())
+            top1_acc.update(top1[0].item(), x.size(0))
+            # update visualization
+            output = torch.argmax(pred, dim=1)
+            dic = compute_metrics(output.cpu(), y.detach().cpu())
             dic.update({"epoch/validation_loss": epoch_loss.val,
                         "epoch/validation_accuracy": top1_acc.val
-                        #"iou":iou.evaluate()[-2]
+                        # "iou":iou.evaluate()[-2]
                         })
             wandb.log(dic)
-            
+
             current_batch += 1
-            if self.config.test_mode and current_batch == 5: 
-                    break
-        # self.visualize()            
+            if self.config.test_mode and current_batch == 5:
+                break
+        # self.visualize()
         print("Validation results at epoch-" + str(self.current_epoch) + " | " + "loss: " + str(
             epoch_loss.avg) + "- Top1 Acc: " + str(top1_acc.val) + "- Top5 Acc: " + str(top5_acc.val))
 
