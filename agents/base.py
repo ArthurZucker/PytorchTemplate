@@ -155,7 +155,7 @@ class BaseAgent:
                           desc="Epoch-{}-".format(self.current_epoch),leave=True)
         # Set the model to be in training mode
         self.model.train()
-        # Initialize your average meters 
+        # Initialize your average meters
         # epoch_loss = 
         # top1_acc = 
         current_batch = 0
@@ -163,8 +163,6 @@ class BaseAgent:
             if self.cuda:
                 x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(non_blocking=self.config.async_loading)
             x, y = Variable(x), y.type(torch.long) # I don't even know why
-            lr = adjust_learning_rate(self.optimizer, self.current_epoch, self.config, batch=current_batch,
-                                      nBatch=self.data_loader.train_iterations)
             
             self.optimizer.zero_grad() 
             # model
@@ -222,10 +220,8 @@ class BaseAgent:
             if self.cuda:
                 x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(non_blocking=self.config.async_loading)
 
-            x, y = Variable(x), Variable(y).type(torch.long)
-            # model
+            x, y = Variable(x), y
             pred = self.model(x)
-            # loss
             cur_loss = self.loss(pred, y)
             if np.isnan(float(cur_loss.item())):
                 raise ValueError('Loss is nan during validation...')
@@ -242,7 +238,7 @@ class BaseAgent:
                         "epoch/validation_accuracy": top1_acc.val
                         #"iou":iou.evaluate()[-2]
                         })
-            self.wandb.log(dic)
+            wandb.log(dic)
             
             current_batch += 1
             if self.config.test_mode and current_batch == 5: 
@@ -262,6 +258,3 @@ class BaseAgent:
         """
         print("Please wait while finalizing the operation.. Thank you")
         self.save_checkpoint()
-        # self.summary_writer.export_scalars_to_json("{}all_scalars.json".format(self.config.summary_dir))
-        # self.summary_writer.close()
-        # self.data_loader.finalize()
