@@ -211,27 +211,20 @@ class BaseAgent:
         self.model.eval()
 
         epoch_loss = AverageMeter()
-        top1_acc = AverageMeter()
-        top5_acc = AverageMeter()
+        correct = 0
         # iou = IOUMetric(self.config.num_classes)
         current_batch = 0
-        for x, y in tqdm_batch:
+        for current_batch,(x, y) in enumerate(tqdm_batch):
             if self.cuda:
-                x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(
-                    non_blocking=self.config.async_loading)
-
-            x, y = Variable(x), y
+                x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(non_blocking=self.config.async_loading)
             pred = self.model(x)
             cur_loss = self.loss(pred, y)
             if np.isnan(float(cur_loss.item())):
                 raise ValueError('Loss is nan during validation...')
 
-            # should I really use .cpu()?????????? @TODO
-            top1 = cls_accuracy(pred.detach().cpu(), y.detach().cpu())
-            # raiou.add_batch(x, y)
-            epoch_loss.update(cur_loss.item())
-            top1_acc.update(top1[0].item(), x.size(0))
-            # update visualization
+            pred = pred.data.max(1, keepdim=True)[1]
+            correct += pred.eq(target.data.view_as(pred)).cpu().sum()
+
             output = torch.argmax(pred, dim=1)
             dic = compute_metrics(output.cpu(), y.detach().cpu())
             dic.update({"epoch/validation_loss": epoch_loss.val,
