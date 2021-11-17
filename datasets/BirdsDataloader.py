@@ -7,7 +7,7 @@ from torchvision import datasets
 from torchvision.transforms import transforms
 
 
-class base_dataloader():
+class BirdsDataloader():
     """
     Creates a dataloader for train and val splits
     """

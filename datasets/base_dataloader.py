@@ -10,12 +10,10 @@ class base_dataloader():
     Creates a dataloader for train and val splits
     """
     def __init__(self,args):
-        
         self.config = args
         self.transform = None
-                
 
-        if self.config.test_mode: 
+        if self.config.test_mode:
             self.train_iterations = 10
 
         print(f"Basic dataloader, data_mode : {args.dataset}, path : {self.config.img_dir}")
