@@ -104,7 +104,7 @@ class BaseAgent:
         # If it is the best copy it to another file 'model_best.pth.tar'
         if is_best:
             shutil.copyfile(self.config.checkpoint_dir + "/" + filename,
-                            self.config.checkpoint_dir + "/" + f'{wandb.run.name}_model_best_{self.best_valid_acc.numpy():.2f}.pth.tar')
+                            self.config.checkpoint_dir + "/" + f'{wandb.run.name}_model_best_{self.best_valid_acc.numpy()*100:.2f}.pth.tar')
 
     def run(self):
         """
