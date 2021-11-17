@@ -1,10 +1,12 @@
 """
 This file will contain the metrics of the framework
 """
+import matplotlib.pyplot as plt
 import numpy as np
 import sklearn.metrics as mt
-import matplotlib.pyplot as plt
 import wandb
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.metrics import RocCurveDisplay
 
 class IOUMetric:
     """
@@ -112,32 +114,30 @@ def cls_accuracy(output, target, topk=(1,)):
         res.append(correct_k / batch_size)
     return res
 
-def compute_metrics(output, target):
-    ap = mt.average_precision_score(target, output)
-    f1 = mt.f1_score(target, output, average='weighted')
-    pr = mt.precision_score(target, output, average='weighted')
-    rc = mt.recall_score(target, output, average='weighted')
 
-    fpr, tpr, thresholds = mt.roc_curve(target, output)
-    roc_auc = mt.auc(fpr, tpr)
-    plt.ioff()
-    plt.figure()
-    lw = 2
-    plt.plot(fpr, tpr, color='darkorange',
-            lw=lw, label='ROC curve (area = %0.2f)' % roc_auc)
-    plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('Receiver operating characteristic weighted')
-    plt.legend(loc="lower right")
+
+def compute_metrics(multi_output, multi_target,num_classes):
+    onehot_encoder = OneHotEncoder(sparse=False)
+    onehot_encoder.fit(np.arange(num_classes).reshape(-1,1))
+    output = onehot_encoder.transform(multi_output.reshape(-1,1))
+    target = onehot_encoder.transform(multi_target.reshape(-1,1))
+    ap = mt.average_precision_score(target, output,average="weighted")
+    f1 = mt.f1_score(target, output, average='weighted',zero_division=1)
+    pr = mt.precision_score(target, output, average='weighted',zero_division=1)
+    rc = mt.recall_score(target, output, average='weighted',zero_division=1)
+
+
+    # plt.ioff()
+    # plt.figure()
+    # plt.title('Receiver operating characteristic weighted')
+    # plt.legend(loc="lower right")
 
     dic = {"epoch/Average Precision (weighted)"  : ap,
            "epoch/F1 score (weighted) "          : f1,
            "epoch/Precision (weighted)"          : pr,
-           "epoch/Recall (weighted)"             : rc,
-           "epoch/Roc (weighted)"                : wandb.Image(plt)}
-    plt.close()
+           "epoch/Recall (weighted)"             : rc
+        }
+           # "epoch/Roc (weighted)"                : wandb.Image(plt)}
+    # plt.close()
     return dic
 

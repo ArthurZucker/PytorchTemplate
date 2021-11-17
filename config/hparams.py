@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import List
-
+import numpy as np
 from simple_parsing.helpers import list_field
 
 """Dataclass allows to have arguments and easily use wandb's weep module.
@@ -14,6 +14,8 @@ Most notably, the agent, dataset, optimizer and loss can all be specified and au
 @dataclass
 class hparams:
     """Hyperparameters of Yout Model"""
+    # validation frequency 
+    validate_every: int = 1
     # num_classes
     num_classes: int = 20
     # feature_extracting or fine_tuning
@@ -21,7 +23,7 @@ class hparams:
     # Learning rate of the Adam optimizer.
     lr: float = 1e-3
     # batch sier
-    batch_size : int = 4
+    batch_size : int = 8
     # Use cuda for training
     cuda: bool = True
     # Architecture to choose, available are "denet (to come)", "sincnet (to come)", "leaf (to come)", "yolor (to come)"
@@ -30,8 +32,12 @@ class hparams:
     agent: str = "BaseAgent"
     # Dataset used for training
     dataloader: str = "BirdsDataloader"
+    # output file for kaggle
+    outfile: str = "result.csv"
     # path to images in dataset
     image_dir: str = "/home/arthur/Work/MVA-S1/recvis/hw3/assets/bird_dataset"
+    # test directory
+    test_dir: str = "/home/arthur/Work/MVA-S1/recvis/hw3/assets/bird_dataset/test_images/mistery_category"
     # Number of workers used for the dataloader
     num_workers: int  = 8
     # weight_decay
@@ -39,7 +45,7 @@ class hparams:
     # momentum 
     momentum: float = 0.9
     # seed
-    seed: float = 1235
+    seed: float = np.random.random()
     # gpu_device
     gpu_device : int = 0
     # optimizer
@@ -47,13 +53,13 @@ class hparams:
     # loss
     loss: str = "CrossEntropy"
     # checkpoint dir
-    checkpoint_dir: str = "./weights"
+    checkpoint_dir: str = "/home/arthur/Work/MVA-S1/recvis/hw3/weights/"
     # checkpoint file
     checkpoint_file: str = ""
     # mode
     mode: str = "train"
     # Toggle testing mode, which only runs a few epochs and val
-    test_mode: bool = True
+    test_mode: bool = False
     # max epoch tu run
     max_epoch: int = 5
     # async_loading
