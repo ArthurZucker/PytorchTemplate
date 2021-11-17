@@ -148,54 +148,37 @@ class BaseAgent:
         if self.config.test_mode:
             self.data_loader.train_iterations = 10
 
-        # tqdm bar
         tqdm_batch = tqdm(self.data_loader.train_loader, total=self.data_loader.train_iterations,
                           desc="Epoch-{}-".format(self.current_epoch), leave=True)
         # Set the model to be in training mode
         self.model.train()
-        # Initialize your average meters
-        # epoch_loss =
-        # top1_acc =
-        current_batch = 0
-        for x, y in tqdm_batch:
+        epoch_loss = AverageMeter()
+        correct = 0
+        for current_batch,(x, y) in enumerate(tqdm_batch):
             if self.cuda:
                 x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(
                     non_blocking=self.config.async_loading)
-            x, y = Variable(x), y.type(torch.long)  # I don't even know why
-
             self.optimizer.zero_grad()
-            # model
             pred = self.model(x)
-            # loss
             cur_loss = self.loss(pred, y)
-
             if np.isnan(float(cur_loss.item())):
                 raise ValueError('Loss is nan during training...')
-            # optimizer
-
             cur_loss.backward()
             self.optimizer.step()
-
-            # should I really use .cpu()?????????? @TODO
-            # top1 = cls_accuracy(pred.detach().cpu(), y.detach().cpu())
-
-            # epoch_loss.update(cur_loss.item())
-            # top1_acc.update(top1[0].item(), x.size(0))
-
+            epoch_loss.update(cur_loss.item())
+            pred = pred.data.max(1, keepdim=True)[1]
+            correct += pred.eq(y.data.view_as(pred)).cpu().sum()
             self.current_iteration += 1
-            current_batch += 1
-
             # logging in wand
             wandb.log({"epoch/loss": epoch_loss.val,
-                      "epoch/accuracy": top1_acc.val})
+                      "epoch/accuracy": correct/len(self.data_loader.valid_loader)})
 
             if self.config.test_mode and current_batch == 11:
                 break
 
         tqdm_batch.close()
-
         print("Training at epoch-" + str(self.current_epoch) + " | " + "loss: " + str(
-            epoch_loss.val) + "- Top1 Acc: " + str(top1_acc.val) + "- Top5 Acc: " + str(top5_acc.val))
+            epoch_loss.val) + "- Top1 Acc: " + str(correct/len(self.data_loader.valid_loader)))
 
     def validate(self):
         """
@@ -212,8 +195,6 @@ class BaseAgent:
 
         epoch_loss = AverageMeter()
         correct = 0
-        # iou = IOUMetric(self.config.num_classes)
-        current_batch = 0
         for current_batch,(x, y) in enumerate(tqdm_batch):
             if self.cuda:
                 x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(non_blocking=self.config.async_loading)
@@ -222,27 +203,25 @@ class BaseAgent:
             if np.isnan(float(cur_loss.item())):
                 raise ValueError('Loss is nan during validation...')
 
+            epoch_loss.update(cur_loss.item())
             pred = pred.data.max(1, keepdim=True)[1]
-            correct += pred.eq(target.data.view_as(pred)).cpu().sum()
+            correct += pred.eq(y.data.view_as(pred)).cpu().sum()
 
             output = torch.argmax(pred, dim=1)
             dic = compute_metrics(output.cpu(), y.detach().cpu())
             dic.update({"epoch/validation_loss": epoch_loss.val,
-                        "epoch/validation_accuracy": top1_acc.val
-                        # "iou":iou.evaluate()[-2]
+                        "epoch/validation_accuracy": correct/len(self.data_loader.valid_loader)
                         })
             wandb.log(dic)
 
-            current_batch += 1
             if self.config.test_mode and current_batch == 5:
                 break
-        # self.visualize()
         print("Validation results at epoch-" + str(self.current_epoch) + " | " + "loss: " + str(
-            epoch_loss.avg) + "- Top1 Acc: " + str(top1_acc.val) + "- Top5 Acc: " + str(top5_acc.val))
+            epoch_loss.avg) + "- Top1 Acc: " + str(correct))
 
         tqdm_batch.close()
 
-        return top1_acc.avg
+        return correct
 
     def finalize(self):
         """
