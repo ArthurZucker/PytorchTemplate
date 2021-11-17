@@ -21,7 +21,7 @@ class hparams:
     # feature_extracting or fine_tuning
     feature_extracting: bool = False
     # Learning rate of the Adam optimizer.
-    lr: float = 1e-3
+    lr: float = 0.5e-3
     # batch sier
     batch_size : int = 8
     # Use cuda for training

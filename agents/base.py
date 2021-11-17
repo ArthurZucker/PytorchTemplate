@@ -104,7 +104,7 @@ class BaseAgent:
         # If it is the best copy it to another file 'model_best.pth.tar'
         if is_best:
             shutil.copyfile(self.config.checkpoint_dir + "/" + filename,
-                            self.config.checkpoint_dir + "/" + f'{wandb.run.name}_model_best_{self.best_valid_acc}.pth.tar')
+                            self.config.checkpoint_dir + "/" + f'{wandb.run.name}_model_best_{self.best_valid_acc.numpy():.2f}.pth.tar')
 
     def run(self):
         """
@@ -154,7 +154,7 @@ class BaseAgent:
         # Set the model to be in training mode
         self.model.train()
         epoch_loss = AverageMeter()
-        correct = 0
+        correct = AverageMeter()
         for current_batch, (x, y) in enumerate(tqdm_batch):
             if self.cuda:
                 x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(
@@ -168,18 +168,20 @@ class BaseAgent:
             self.optimizer.step()
             epoch_loss.update(cur_loss.item())
             pred = pred.data.max(1, keepdim=True)[1]
-            correct += pred.eq(y.data.view_as(pred)).cpu().sum()
+            correct.update(
+                pred.eq(y.data.view_as(pred)).cpu().sum()/y.shape[0])
             self.current_iteration += 1
             # logging in wand
             wandb.log({"epoch/loss": epoch_loss.val,
-                      "epoch/accuracy": (correct/self.data_loader.len_train_data).data})
+                       "epoch/accuracy": correct.val
+                       })
 
             if self.config.test_mode and current_batch == 11:
                 break
 
         tqdm_batch.close()
         print("Training at epoch-" + str(self.current_epoch) + " | " + "loss: " + str(
-            epoch_loss.val) + "- Top1 Acc: " + str((correct/self.data_loader.len_train_data).data))
+            epoch_loss.val) + "- Top1 Acc: " + str(correct.val))
 
     def validate(self):
         """
@@ -196,7 +198,7 @@ class BaseAgent:
         self.model.eval()
 
         epoch_loss = AverageMeter()
-        correct = 0
+        correct = AverageMeter()
         for current_batch, (x, y) in enumerate(tqdm_batch):
             if self.cuda:
                 x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(
@@ -208,11 +210,12 @@ class BaseAgent:
 
             epoch_loss.update(cur_loss.item())
             pred = pred.data.max(1, keepdim=True)[1]
-            correct += pred.eq(y.data.view_as(pred)).cpu().sum()
+            correct.update(
+                pred.eq(y.data.view_as(pred)).cpu().sum()/y.shape[0])
             dic = {}
             # dic = compute_metrics(output.cpu(), y.detach().cpu(),self.config.num_classes)
             dic.update({"epoch/validation_loss": epoch_loss.val,
-                        "epoch/validation_accuracy": (correct/self.data_loader.len_valid_data).data
+                        "epoch/validation_accuracy": correct.val
                         })
             wandb.log(dic)
 
@@ -220,11 +223,11 @@ class BaseAgent:
                 break
         print("Validation results at epoch-" + str(self.current_epoch)
               + " | " + "loss: " + str(epoch_loss.avg)
-              + "- Top1 Acc: " + str((correct/self.data_loader.len_valid_data).data))
+              + "- Top1 Acc: " + str(correct.val))
 
         tqdm_batch.close()
 
-        return correct/self.data_loader.len_valid_data
+        return correct.val
 
     def test(self):
         import PIL.Image as Image

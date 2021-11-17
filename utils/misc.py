@@ -36,4 +36,4 @@ def print_cuda_statistics():
     logger += 'Active CUDA Device: GPU {}'.format(torch.cuda.current_device())
     logger += 'Available devices  {}'.format(torch.cuda.device_count())
     logger += 'Current cuda device  {}'.format(torch.cuda.current_device())
-    wandb.log({"Cuda statistics ":wandb.Html(logger)})
+    print({"Cuda statistics ":logger})
