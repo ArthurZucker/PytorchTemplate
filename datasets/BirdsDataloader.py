@@ -30,4 +30,4 @@ class BirdsDataloader():
         self.valid_iterations = (self.len_valid_data + self.config.batch_size - 1) // self.config.batch_size
 
         self.train_loader = DataLoader(train_dataset,batch_size=self.config.batch_size, shuffle=True,num_workers=self.config.num_workers)
-        self.val_loader = DataLoader(valid_dataset,batch_size=self.config.batch_size, shuffle=False,num_workers=self.config.num_workers)
+        self.valid_loader = DataLoader(valid_dataset,batch_size=self.config.batch_size, shuffle=False,num_workers=self.config.num_workers)

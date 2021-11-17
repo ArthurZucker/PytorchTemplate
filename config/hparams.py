@@ -31,9 +31,17 @@ class hparams:
     # Dataset used for training
     dataloader: str = "BirdsDataloader"
     # path to images in dataset
-    img_dir: str = "/home/arthur/Work/MVA-S1/recvis/hw3/assets/bird_dataset"
+    image_dir: str = "/home/arthur/Work/MVA-S1/recvis/hw3/assets/bird_dataset"
     # Number of workers used for the dataloader
-    num_workers = 8
+    num_workers: int  = 8
+    # weight_decay
+    weight_decay: float = 0.01
+    # momentum 
+    momentum: float = 0.9
+    # seed
+    seed: float = 1235
+    # gpu_device
+    gpu_device : int = 0
     # optimizer
     optimizer: str = "SGD"
     # loss

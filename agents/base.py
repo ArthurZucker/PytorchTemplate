@@ -172,14 +172,14 @@ class BaseAgent:
             self.current_iteration += 1
             # logging in wand
             wandb.log({"epoch/loss": epoch_loss.val,
-                      "epoch/accuracy": correct/len(self.data_loader.valid_loader)})
+                      "epoch/accuracy": correct/self.dataloader.len_train_data})
 
             if self.config.test_mode and current_batch == 11:
                 break
 
         tqdm_batch.close()
         print("Training at epoch-" + str(self.current_epoch) + " | " + "loss: " + str(
-            epoch_loss.val) + "- Top1 Acc: " + str(correct/len(self.data_loader.valid_loader)))
+            epoch_loss.val) + "- Top1 Acc: " + str(correct/self.dataloader.len_train_data))
 
     def validate(self):
         """
@@ -211,14 +211,14 @@ class BaseAgent:
             output = torch.argmax(pred, dim=1)
             dic = compute_metrics(output.cpu(), y.detach().cpu())
             dic.update({"epoch/validation_loss": epoch_loss.val,
-                        "epoch/validation_accuracy": correct/len(self.data_loader.valid_loader)
+                        "epoch/validation_accuracy": correct/self.data_loader.len_valid_data
                         })
             wandb.log(dic)
 
             if self.config.test_mode and current_batch == 5:
                 break
         print("Validation results at epoch-" + str(self.current_epoch) + " | " + "loss: " + str(
-            epoch_loss.avg) + "- Top1 Acc: " + str(correct))
+            epoch_loss.avg) + "- Top1 Acc: " + str(correct/self.data_loader.len_valid_data))
 
         tqdm_batch.close()
 
