@@ -219,8 +219,6 @@ class BaseAgent:
             if self.cuda:
                 x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(
                     non_blocking=self.config.async_loading)
-
-            x, y = Variable(x), y
             pred = self.model(x)
             cur_loss = self.loss(pred, y)
             if np.isnan(float(cur_loss.item())):
