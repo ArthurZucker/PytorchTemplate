@@ -21,8 +21,8 @@ class BirdsDataloader():
                                  std=[0.229, 0.224, 0.225])
         ])
 
-        train_dataset = datasets.ImageFolder(args.data + '/train_images',transform=self.transform)
-        valid_dataset = datasets.ImageFolder(args.data + '/val_images',transform=self.transform)
+        train_dataset = datasets.ImageFolder(self.config.image_dir + '/train_images',transform=self.transform)
+        valid_dataset = datasets.ImageFolder(self.config.image_dir + '/val_images',transform=self.transform)
         self.len_train_data = len(train_dataset)
         self.len_valid_data = len(valid_dataset)
 

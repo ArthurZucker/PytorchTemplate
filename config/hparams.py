@@ -14,29 +14,32 @@ Most notably, the agent, dataset, optimizer and loss can all be specified and au
 @dataclass
 class hparams:
     """Hyperparameters of Yout Model"""
+    # num_classes
+    num_classes: int = 20
+    # feature_extracting or fine_tuning
+    feature_extracting: bool = False
     # Learning rate of the Adam optimizer.
-    lr: float = 0.05
-    # learning rate scheduler, policy to decrease
-    lr_schedule: str = "poly2"
+    lr: float = 1e-3
+    # batch sier
+    batch_size : int = 4
     # Use cuda for training
     cuda: bool = True
     # Architecture to choose, available are "denet (to come)", "sincnet (to come)", "leaf (to come)", "yolor (to come)"
     arch: str = "resnet50"
     # Agent to use, the agent has his own trining loop
-    agent: str = "Base"
+    agent: str = "BaseAgent"
     # Dataset used for training
-    dataset: str = "egyptian"
+    dataloader: str = "BirdsDataloader"
     # path to images in dataset
-    img_dir: str = "/home/arthur/Work/FlyingFoxes/database/EgyptianFruitBats"
-    # annotation path
-    annotation_file: str = "/home/arthur/Work/FlyingFoxes/sources/flying_foxes_study/AudioEventDetection/DENet/assets/subsampled_datset.csv"
+    img_dir: str = "/home/arthur/Work/MVA-S1/recvis/hw3/assets/bird_dataset"
     # Number of workers used for the dataloader
+    num_workers = 8
     # optimizer
-    optimizer: str = "Rmsprop"
+    optimizer: str = "SGD"
     # loss
-    loss: str = "NNL"
+    loss: str = "CrossEntropy"
     # checkpoint dir
-    checkpoint_dir: str = "weights"
+    checkpoint_dir: str = "./weights"
     # checkpoint file
     checkpoint_file: str = ""
     # mode

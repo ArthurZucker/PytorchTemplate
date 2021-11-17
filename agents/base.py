@@ -17,6 +17,7 @@ from utils.agent_utils import get_loss, get_net, get_optimizer
 from utils.metrics import AverageMeter, cls_accuracy, compute_metrics
 from utils.misc import print_cuda_statistics
 
+from datasets import *
 
 class BaseAgent:
     """
@@ -28,7 +29,7 @@ class BaseAgent:
         self.model = get_net(config)
         print(self.model)
         run.watch(self.model)  # run is a wandb instance
-        self.data_loader = base_dataloader(self.config)
+        self.data_loader = globals()[self.config.dataloader](self.config)
 
         # define loss
         self.loss = get_loss(config.loss)

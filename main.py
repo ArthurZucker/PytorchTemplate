@@ -21,7 +21,7 @@ args = parser.parse_args()
 
 def main():
     # initialize wandb instance
-    run = wandb.init(config=vars(args.hparams), project="MySweep-sweep run (testing code)", allow_val_change=True)
+    run = wandb.init(config=vars(args.hparams), project="kaggle", allow_val_change=True)
     config = wandb.config
     # Create the Agent and pass all the configuration to it then run it..
     agent_class = globals()[config.agent]
