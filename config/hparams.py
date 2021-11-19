@@ -39,7 +39,7 @@ class hparams:
     # test directory
     test_dir: str = "/home/arthur/Work/MVA-S1/recvis/hw3/assets/bird_dataset/test_images/mistery_category"
     # Number of workers used for the dataloader
-    num_workers: int  = 8
+    num_workers: int  = 16
     # weight_decay
     weight_decay: float = 0.01
     # momentum 
@@ -61,7 +61,7 @@ class hparams:
     # Toggle testing mode, which only runs a few epochs and val
     test_mode: bool = False
     # max epoch tu run
-    max_epoch: int = 5
+    max_epoch: int = 100
     # async_loading
     async_loading: bool = True
     # activation function

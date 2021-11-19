@@ -15,7 +15,7 @@ from torch.optim.lr_scheduler import ExponentialLR
 from tqdm import tqdm
 from utils.agent_utils import get_loss, get_net, get_optimizer
 # import your classes here
-from utils.metrics import AverageMeter, cls_accuracy, compute_metrics
+from utils.metrics import AverageMeter, cls_accuracy, compute_metrics,multi_cls_accuracy,multi_cls_roc
 from utils.misc import print_cuda_statistics
 
 
@@ -196,7 +196,8 @@ class BaseAgent:
 
         # set the model in training mode
         self.model.eval()
-
+        validation_prediction = []
+        validation_target =  []
         epoch_loss = AverageMeter()
         correct = AverageMeter()
         for current_batch, (x, y) in enumerate(tqdm_batch):
@@ -213,6 +214,9 @@ class BaseAgent:
             correct.update(
                 pred.eq(y.data.view_as(pred)).cpu().sum()/y.shape[0])
             dic = {}
+            validation_prediction += pred.cpu()
+            validation_target += y.detach().cpu()
+            
             # dic = compute_metrics(output.cpu(), y.detach().cpu(),self.config.num_classes)
             dic.update({"epoch/validation_loss": epoch_loss.val,
                         "epoch/validation_accuracy": correct.val
@@ -221,9 +225,16 @@ class BaseAgent:
 
             if self.config.test_mode and current_batch == 5:
                 break
+        p,r,f,plot = multi_cls_accuracy(validation_prediction, validation_target)
+        roc_plot = multi_cls_roc(validation_prediction, validation_target,self.config.num_classes)
+        wandb.log({"RocCurve":plot,"mutli-class Roc":roc_plot,"Recall":r,"Precision":p,"F1":f})
         print("Validation results at epoch-" + str(self.current_epoch)
               + " | " + "loss: " + str(epoch_loss.avg)
-              + "- Top1 Acc: " + str(correct.val))
+              + "- Top1 Acc: " + str(correct.val) 
+              + " Precision : " + str(p)
+              + " Recall : " + str(r)
+              + "F1 score : " + str(f)
+              )
 
         tqdm_batch.close()
 
