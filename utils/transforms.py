@@ -1,5 +1,7 @@
 from graphs.models.mobileNet import MobileNet
 import matplotlib.pyplot as plt 
+import torch.nn as nn
+import torch
 class SemanticSegmentation(object):
 	""" Gets rid of the background and only returns a smaller image containing 
 	the bird's pixels. 
@@ -11,7 +13,7 @@ class SemanticSegmentation(object):
 	or if the numpy.ndarray has dtype = np.uint8
 	In the other cases, tensors are returned without scaling.
 	"""
-	def __init__(self):
+	def __init__(self,args = None):
 		super().__init__()
 		self.net = MobileNet()
 		self.bird_class = 3
@@ -24,12 +26,15 @@ class SemanticSegmentation(object):
 			Returns:
 				Tensor: Converted image.
 		"""
-		segmented = self.net(pic)
-		segmented = segmented[:,self.bird_class]
-		segmented = segmented[segmented >= 0.8]
-		plt.ioff()
+		segmented = nn.Softmax()(self.net(pic.unsqueeze(0))["out"])
+		segmented = segmented[:,self.bird_class,:,:]
+		print(torch.max(segmented))
+		segmented = segmented[segmented >= 0.5]
+		print(segmented)
+		# plt.ioff()
 		plt.imshow(segmented)
 		plt.close()
+
 		return segmented
 
 	def __repr__(self):
