@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision.transforms import transforms
 
+from utils.transforms import SemanticSegmentation
 
 class BirdsDataloader():
     """
@@ -18,7 +19,8 @@ class BirdsDataloader():
             transforms.Resize((384, 384)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
+                                 std=[0.229, 0.224, 0.225]),
+            SemanticSegmentation()
         ])
 
         train_dataset = datasets.ImageFolder(self.config.image_dir + '/train_images',transform=self.transform)
