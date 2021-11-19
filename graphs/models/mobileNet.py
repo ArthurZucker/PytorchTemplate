@@ -7,7 +7,7 @@ class MobileNet(nn.Module):
         self.config = args
         self.net = lraspp_mobilenet_v3_large(pretrained=True)
         for param in self.net.parameters():
-			param.requires_grad = False
+            param.requires_grad = False
 
     def forward(self, x):
         x = self.net(x)
