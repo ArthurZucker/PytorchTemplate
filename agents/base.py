@@ -8,16 +8,16 @@ import numpy as np
 import torch
 # visualisation tool
 import wandb
-from datasets.base_dataloader import base_dataloader
+from datasets import *
+from datasets.BirdsDataloader import BirdsDataloader
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import ExponentialLR
 from tqdm import tqdm
 from utils.agent_utils import get_loss, get_net, get_optimizer
 # import your classes here
-from utils.metrics import AverageMeter, cls_accuracy, compute_metrics
+from utils.metrics import AverageMeter, cls_accuracy, compute_metrics,multi_cls_accuracy,multi_cls_roc
 from utils.misc import print_cuda_statistics
 
-from datasets import *
 
 class BaseAgent:
     """
@@ -103,8 +103,8 @@ class BaseAgent:
         torch.save(state, self.config.checkpoint_dir + filename)
         # If it is the best copy it to another file 'model_best.pth.tar'
         if is_best:
-            shutil.copyfile(self.config.checkpoint_dir + filename,
-                            self.config.checkpoint_dir + 'model_best.pth.tar')
+            shutil.copyfile(self.config.checkpoint_dir + "/" + filename,
+                            self.config.checkpoint_dir + "/" + f'{wandb.run.name}_model_best_{self.best_valid_acc.numpy()*100:.2f}.pth.tar')
 
     def run(self):
         """
@@ -113,7 +113,7 @@ class BaseAgent:
         """
         try:
             if self.config.mode == 'test':
-                self.validate()
+                self.test()
             else:
                 self.train()
 
@@ -154,8 +154,8 @@ class BaseAgent:
         # Set the model to be in training mode
         self.model.train()
         epoch_loss = AverageMeter()
-        correct = 0
-        for current_batch,(x, y) in enumerate(tqdm_batch):
+        correct = AverageMeter()
+        for current_batch, (x, y) in enumerate(tqdm_batch):
             if self.cuda:
                 x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(
                     non_blocking=self.config.async_loading)
@@ -168,18 +168,20 @@ class BaseAgent:
             self.optimizer.step()
             epoch_loss.update(cur_loss.item())
             pred = pred.data.max(1, keepdim=True)[1]
-            correct += pred.eq(y.data.view_as(pred)).cpu().sum()
+            correct.update(
+                pred.eq(y.data.view_as(pred)).cpu().sum()/y.shape[0])
             self.current_iteration += 1
             # logging in wand
             wandb.log({"epoch/loss": epoch_loss.val,
-                      "epoch/accuracy": correct/self.dataloader.len_train_data})
+                       "epoch/accuracy": correct.val
+                       })
 
             if self.config.test_mode and current_batch == 11:
                 break
 
         tqdm_batch.close()
         print("Training at epoch-" + str(self.current_epoch) + " | " + "loss: " + str(
-            epoch_loss.val) + "- Top1 Acc: " + str(correct/self.dataloader.len_train_data))
+            epoch_loss.val) + "- Top1 Acc: " + str(correct.val))
 
     def validate(self):
         """
@@ -188,17 +190,20 @@ class BaseAgent:
         """
         if self.config.test_mode:
             self.data_loader.valid_iterations = 5
+
         tqdm_batch = tqdm(self.data_loader.valid_loader, total=self.data_loader.valid_iterations,
                           desc="Validation at -{}-".format(self.current_epoch))
 
         # set the model in training mode
         self.model.eval()
-
+        validation_prediction = []
+        validation_target =  []
         epoch_loss = AverageMeter()
-        correct = 0
-        for current_batch,(x, y) in enumerate(tqdm_batch):
+        correct = AverageMeter()
+        for current_batch, (x, y) in enumerate(tqdm_batch):
             if self.cuda:
-                x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(non_blocking=self.config.async_loading)
+                x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(
+                    non_blocking=self.config.async_loading)
             pred = self.model(x)
             cur_loss = self.loss(pred, y)
             if np.isnan(float(cur_loss.item())):
@@ -206,23 +211,60 @@ class BaseAgent:
 
             epoch_loss.update(cur_loss.item())
             pred = pred.data.max(1, keepdim=True)[1]
-            correct += pred.eq(y.data.view_as(pred)).cpu().sum()
-
-            output = torch.argmax(pred, dim=1)
-            dic = compute_metrics(output.cpu(), y.detach().cpu())
+            correct.update(
+                pred.eq(y.data.view_as(pred)).cpu().sum()/y.shape[0])
+            dic = {}
+            validation_prediction += pred.cpu()
+            validation_target += y.detach().cpu()
+            
+            # dic = compute_metrics(output.cpu(), y.detach().cpu(),self.config.num_classes)
             dic.update({"epoch/validation_loss": epoch_loss.val,
-                        "epoch/validation_accuracy": correct/self.data_loader.len_valid_data
+                        "epoch/validation_accuracy": correct.val
                         })
             wandb.log(dic)
 
             if self.config.test_mode and current_batch == 5:
                 break
-        print("Validation results at epoch-" + str(self.current_epoch) + " | " + "loss: " + str(
-            epoch_loss.avg) + "- Top1 Acc: " + str(correct/self.data_loader.len_valid_data))
+        p,r,f,plot = multi_cls_accuracy(validation_prediction, validation_target)
+        roc_plot = multi_cls_roc(validation_prediction, validation_target,self.config.num_classes)
+        wandb.log({"RocCurve":plot,"mutli-class Roc":roc_plot,"Recall":r,"Precision":p,"F1":f})
+        print("Validation results at epoch-" + str(self.current_epoch)
+              + " | " + "loss: " + str(epoch_loss.avg)
+              + "- Top1 Acc: " + str(correct.val) 
+              + " Precision : " + str(p)
+              + " Recall : " + str(r)
+              + "F1 score : " + str(f)
+              )
 
         tqdm_batch.close()
 
-        return correct
+        return correct.val
+
+    def test(self):
+        import PIL.Image as Image
+
+        def pil_loader(path):
+            with open(path, 'rb') as f:
+                with Image.open(f) as img:
+                    return img.convert('RGB')
+
+        # set the model in training mode
+        self.model.eval()
+        output_file = open(self.config.outfile, "w")
+        output_file.write("Id,Category\n")
+        for f in tqdm(os.listdir(self.config.test_dir)):
+            if 'jpg' in f:
+                data = self.data_loader.transform(
+                    pil_loader(self.config.test_dir + '/' + f))
+                data = data.view(1, data.size(0), data.size(1), data.size(2))
+                if self.cuda:
+                    data = data.cuda()
+                output = self.model(data)
+                pred = output.data.max(1, keepdim=True)[1]
+                output_file.write("%s,%d\n" % (f[:-4], pred))
+        output_file.close()
+        print("Succesfully wrote " + self.config.outfile +
+              ', you can upload this file to the kaggle competition website')
 
     def finalize(self):
         """
