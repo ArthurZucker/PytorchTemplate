@@ -10,6 +10,7 @@ from torchvision.transforms import transforms
 from utils.transforms import SemanticSegmentation
 import torch
 
+
 class BirdsDataloader():
     """
     Creates a dataloader for train and val splits
@@ -17,37 +18,49 @@ class BirdsDataloader():
 
     def __init__(self, args):
         self.config = args
-        self.transform = transforms.Compose([
-            
-            
-            transforms.Resize((520, 520)),
-            
+        self.transform = {"train": transforms.Compose([
+
+
+            # transforms.Resize((520, 520)),
+
             transforms.PILToTensor(),
             transforms.ConvertImageDtype(torch.uint8),
             T.AutoAugment(T.AutoAugmentPolicy.CIFAR10),
-             transforms.ConvertImageDtype(torch.float),
-            T.RandomPerspective(distortion_scale=0.6, p=1.0),
-            
+            transforms.ConvertImageDtype(torch.float),
+            # T.RandomPerspective(distortion_scale=0.6, p=1.0),
+
             # transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225]),
-            
-            transforms.RandomErasing(),
-            
-            
-            SemanticSegmentation(),
+
+            # transforms.RandomErasing(inplace=True),
+
+
+            # SemanticSegmentation(),
             transforms.Resize((384, 384)),
-            
-            
-        ])
+        ]),
+            "val": transforms.Compose([
+                transforms.Resize((384, 384)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225]),
+            ]
+        )
+        }
 
-        train_dataset = datasets.ImageFolder(self.config.image_dir + '/train_images',transform=self.transform)
-        valid_dataset = datasets.ImageFolder(self.config.image_dir + '/val_images',transform=self.transform)
-        self.len_train_data = len(train_dataset)
-        self.len_valid_data = len(valid_dataset)
+        self.train_dataset = datasets.ImageFolder(
+            self.config.image_dir + '/train_images', transform=self.transform["train"])
+        self.valid_dataset = datasets.ImageFolder(
+            self.config.image_dir + '/val_images', transform=self.transform["val"])
+        self.len_train_data = len(self.train_dataset)
+        self.len_valid_data = len(self.valid_dataset)
 
-        self.train_iterations = (self.len_train_data + self.config.batch_size - 1) // self.config.batch_size
-        self.valid_iterations = (self.len_valid_data + self.config.batch_size - 1) // self.config.batch_size
+        self.train_iterations = (
+            self.len_train_data + self.config.batch_size - 1) // self.config.batch_size
+        self.valid_iterations = (
+            self.len_valid_data + self.config.batch_size - 1) // self.config.batch_size
 
-        self.train_loader = DataLoader(train_dataset,batch_size=self.config.batch_size, shuffle=True,num_workers=self.config.num_workers)
-        self.valid_loader = DataLoader(valid_dataset,batch_size=self.config.batch_size, shuffle=False,num_workers=self.config.num_workers)
+        self.train_loader = DataLoader(
+            self.train_dataset, batch_size=self.config.batch_size, shuffle=True, num_workers=self.config.num_workers)
+        self.valid_loader = DataLoader(
+            self.valid_dataset, batch_size=self.config.batch_size, shuffle=False, num_workers=self.config.num_workers)

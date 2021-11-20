@@ -42,7 +42,7 @@ class hparams:
     # Number of workers used for the dataloader
     num_workers: int  = 16
     # weight_decay
-    weight_decay: float = 0.01
+    weight_decay: float = 0.001
     # momentum 
     momentum: float = 0.9
     # seed

@@ -114,6 +114,13 @@ def cls_accuracy(output, target, topk=(1,)):
         res.append(correct_k / batch_size)
     return res
 
+def consusion_matrix(output,target):
+    from sklearn.metrics import ConfusionMatrixDisplay
+    ConfusionMatrixDisplay.from_predictions(target.astype(np.int32), output.astype(np.int32))
+    plot = wandb.Image(plt)
+    plt.close()
+    return plot
+    
 
 def multi_cls_accuracy(output, target):
     plt.ioff()
