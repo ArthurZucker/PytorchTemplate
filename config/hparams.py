@@ -3,6 +3,7 @@ from typing import List
 import numpy as np
 from simple_parsing.helpers import list_field
 
+import os
 """Dataclass allows to have arguments and easily use wandb's weep module.
 
 Each arguments can be preceded by a comment, which will describe it when you call 'main.pu --help
@@ -35,9 +36,9 @@ class hparams:
     # output file for kaggle
     outfile: str = "result.csv"
     # path to images in dataset
-    image_dir: str = "/home/arthur/Work/MVA-S1/recvis/hw3/assets/bird_dataset"
+    image_dir: str = os.path.join(os.getcwd(),"assets/bird_dataset")
     # test directory
-    test_dir: str = "/home/arthur/Work/MVA-S1/recvis/hw3/assets/bird_dataset/test_images/mistery_category"
+    test_dir: str = os.path.join(os.getcwd(),"assets/bird_dataset/test_images/mistery_category")
     # Number of workers used for the dataloader
     num_workers: int  = 16
     # weight_decay
@@ -53,7 +54,7 @@ class hparams:
     # loss
     loss: str = "CrossEntropy"
     # checkpoint dir
-    checkpoint_dir: str = "/home/arthur/Work/MVA-S1/recvis/hw3/weights/"
+    checkpoint_dir: str = os.path.join(os.getcwd(),"weights/")
     # checkpoint file
     checkpoint_file: str = ""
     # mode

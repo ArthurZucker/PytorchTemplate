@@ -1,12 +1,14 @@
 """Data loader for the bird dataset provided by the TA and modified to fit my repository's architecture
 
 """
+import torchvision
+import torchvision.transforms as T
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision.transforms import transforms
-
 from utils.transforms import SemanticSegmentation
+import torch
 
 class BirdsDataloader():
     """
@@ -16,11 +18,27 @@ class BirdsDataloader():
     def __init__(self, args):
         self.config = args
         self.transform = transforms.Compose([
-            transforms.Resize((384, 384)),
-            transforms.ToTensor(),
+            
+            
+            transforms.Resize((520, 520)),
+            
+            transforms.PILToTensor(),
+            transforms.ConvertImageDtype(torch.uint8),
+            T.AutoAugment(T.AutoAugmentPolicy.CIFAR10),
+             transforms.ConvertImageDtype(torch.float),
+            T.RandomPerspective(distortion_scale=0.6, p=1.0),
+            
+            # transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225]),
-            SemanticSegmentation()
+            
+            transforms.RandomErasing(),
+            
+            
+            SemanticSegmentation(),
+            transforms.Resize((384, 384)),
+            
+            
         ])
 
         train_dataset = datasets.ImageFolder(self.config.image_dir + '/train_images',transform=self.transform)
@@ -33,5 +51,3 @@ class BirdsDataloader():
 
         self.train_loader = DataLoader(train_dataset,batch_size=self.config.batch_size, shuffle=True,num_workers=self.config.num_workers)
         self.valid_loader = DataLoader(valid_dataset,batch_size=self.config.batch_size, shuffle=False,num_workers=self.config.num_workers)
-    
-        

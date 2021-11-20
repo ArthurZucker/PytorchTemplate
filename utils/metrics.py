@@ -165,21 +165,21 @@ def multi_cls_roc(target, output,num_classes):
         precision[i], recall[i], _ = precision_recall_curve(target[:, i], output[:, i])
         average_precision[i] = average_precision_score(target[:, i], output[:, i])
 
-    # A "micro-average": quantifying score on all classes jointly
-    precision["micro"], recall["micro"], _ = precision_recall_curve(
+    # A "weighted-average": quantifying score on all classes jointly
+    precision["weighted"], recall["weighted"], _ = precision_recall_curve(
         target.ravel(), output.ravel()
     )
-    average_precision["micro"] = average_precision_score(target, output, average="micro")
+    average_precision["weighted"] = average_precision_score(target, output, average="weighted")
     plt.ioff()
     plt.figure()
     
     display = mt.PrecisionRecallDisplay(
-    recall=recall["micro"],
-    precision=precision["micro"],
-    average_precision=average_precision["micro"],
+    recall=recall["weighted"],
+    precision=precision["weighted"],
+    average_precision=average_precision["weighted"],
     )
     display.plot()
-    _ = display.ax_.set_title("Micro-averaged over all classes")
+    _ = display.ax_.set_title("weighted-averaged over all classes")
 
 
     # setup plot details
@@ -198,11 +198,11 @@ def multi_cls_roc(target, output,num_classes):
         plt.annotate("f1={0:0.1f}".format(f_score), xy=(0.9, y[45] + 0.02))
 
     display = mt.PrecisionRecallDisplay(
-        recall=recall["micro"],
-        precision=precision["micro"],
-        average_precision=average_precision["micro"],
+        recall=recall["weighted"],
+        precision=precision["weighted"],
+        average_precision=average_precision["weighted"],
     )
-    display.plot(ax=ax, name="Micro-average precision-recall", color="gold")
+    display.plot(ax=ax, name="weighted-average precision-recall", color="gold")
 
     for i, color in zip(range(num_classes), colors):
         display = mt.PrecisionRecallDisplay(
@@ -223,4 +223,4 @@ def multi_cls_roc(target, output,num_classes):
     ax.set_title("Extension of Precision-Recall curve to multi-class")
     wandb_plot = wandb.Image(plt)
     plt.close()
-    return wandb_plot
+    return wandb_plot,np.mean(average_precision["weighted"])

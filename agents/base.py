@@ -226,14 +226,15 @@ class BaseAgent:
             if self.config.test_mode and current_batch == 5:
                 break
         p,r,f,plot = multi_cls_accuracy(validation_prediction, validation_target)
-        roc_plot = multi_cls_roc(validation_prediction, validation_target,self.config.num_classes)
-        wandb.log({"RocCurve":plot,"mutli-class Roc":roc_plot,"Recall":r,"Precision":p,"F1":f})
+        roc_plot,auc   = multi_cls_roc(validation_prediction, validation_target,self.config.num_classes)
+        wandb.log({"RocCurves":[plot,roc_plot],"Recall":r,"Precision":p,"F1":f,"mAP":auc})
         print("Validation results at epoch-" + str(self.current_epoch)
-              + " | " + "loss: " + str(epoch_loss.avg)
-              + "- Top1 Acc: " + str(correct.val) 
-              + " Precision : " + str(p)
-              + " Recall : " + str(r)
-              + "F1 score : " + str(f)
+              + " | " + "loss: "    + str(epoch_loss.avg)
+              + "\n Top1 Acc \t: "  + str(correct.val) 
+              + "\n Precision \t: " + str(p)
+              + "\n Recall \t: "    + str(r)
+              + "\n F1 score \t: "  + str(f)
+              + "\n mean AP \t: "   + str(auc)
               )
 
         tqdm_batch.close()
@@ -252,6 +253,8 @@ class BaseAgent:
         self.model.eval()
         output_file = open(self.config.outfile, "w")
         output_file.write("Id,Category\n")
+      
+        
         for f in tqdm(os.listdir(self.config.test_dir)):
             if 'jpg' in f:
                 data = self.data_loader.transform(
@@ -263,6 +266,8 @@ class BaseAgent:
                 pred = output.data.max(1, keepdim=True)[1]
                 output_file.write("%s,%d\n" % (f[:-4], pred))
         output_file.close()
+        
+        
         print("Succesfully wrote " + self.config.outfile +
               ', you can upload this file to the kaggle competition website')
 
