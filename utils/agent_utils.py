@@ -14,6 +14,8 @@ def get_loss(args):
 
     if args == "NNL":
        return nn.NLLLoss()
+    if args == "CrossEntropy":
+      return nn.CrossEntropyLoss(reduction='mean')
     else:
        print("Not implemented yet")
 
