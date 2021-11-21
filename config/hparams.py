@@ -58,7 +58,7 @@ class hparams:
     # checkpoint file
     checkpoint_file: str = ""
     # mode
-    mode: str = "train"
+    mode: str = "test"
     # Toggle testing mode, which only runs a few epochs and val
     test_mode: bool = False
     # max epoch tu run
@@ -67,7 +67,8 @@ class hparams:
     async_loading: bool = True
     # activation function
     activation: str = "relu"
-
+    # accuracy threshold used for siames network 
+    accuracy_threshold: float = 0.5
     # example of list parameters
     # layer resolutions
     fc_lay: List[int] = list_field(2048, 2048, 2048, 1024, 256, 2)

@@ -6,6 +6,7 @@ from os import path
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 # visualisation tool
 import wandb
 from datasets import *
@@ -15,7 +16,8 @@ from torch.optim.lr_scheduler import ExponentialLR
 from tqdm import tqdm
 from utils.agent_utils import get_loss, get_net, get_optimizer
 # import your classes here
-from utils.metrics import AverageMeter, consusion_matrix, compute_metrics, multi_cls_accuracy, multi_cls_roc
+from utils.metrics import (AverageMeter, compute_metrics, consusion_matrix,
+                           multi_cls_accuracy, multi_cls_roc)
 from utils.misc import print_cuda_statistics
 
 
@@ -155,23 +157,45 @@ class BaseAgent:
         self.model.train()
         epoch_loss = AverageMeter()
         correct = AverageMeter()
-        for current_batch, (x, y) in enumerate(tqdm_batch):
+
+        for current_batch, img_triplet in enumerate(tqdm_batch):
+            anchor_img, pos_img, neg_img = img_triplet
+
             if self.cuda:
-                x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(
+                anchor_img, pos_img, neg_img = anchor_img.cuda(
+                    non_blocking=self.config.async_loading),
+                pos_img.cuda(non_blocking=self.config.async_loading), neg_img.cuda(
                     non_blocking=self.config.async_loading)
-            self.optimizer.zero_grad()
-            pred = self.model(x)
-            cur_loss = self.loss(pred, y)
+            # extract deep embeddings
+            E1, E2, E3 = self.model(anchor_img, pos_img, neg_img)
+
+            dist_E1_E2 = F.pairwise_distance(E1, E2, 2)
+            dist_E1_E3 = F.pairwise_distance(E1, E3, 2)
+
+            target = torch.FloatTensor(dist_E1_E2.size()).fill_(-1)
+            target = target.cuda(non_blocking=self.config.async_loading)
+
+            cur_loss = self.loss(dist_E1_E2, dist_E1_E3, target)
+
             if np.isnan(float(cur_loss.item())):
                 raise ValueError('Loss is nan during training...')
+
+            self.optimizer.zero_grad()
             cur_loss.backward()
             self.optimizer.step()
+
             epoch_loss.update(cur_loss.item())
-            tped = torch.squeeze(torch.argmax(pred.detach(),dim=1,keepdim=True))
-            correct.update(
-                sum(tped==y).cpu() /y.shape[0]
-            )
-            
+
+            prediction = (dist_E1_E3 - dist_E1_E2 - self.config.margin *
+                          self.config.accuracy_threshold).cpu().data
+            prediction = prediction.view(prediction.numel())
+            prediction = (prediction > 0).float()
+            batch_acc = prediction.sum() * 1.0 / prediction.numel()
+
+            tped = torch.squeeze(torch.argmax(
+                pred.detach(), dim=1, keepdim=True))
+            correct.update(batch_acc)
+
             self.current_iteration += 1
             # logging in wand
             wandb.log({"epoch/loss": epoch_loss.val,
@@ -202,7 +226,7 @@ class BaseAgent:
         validation_target = []
         epoch_loss = AverageMeter()
         correct = AverageMeter()
-        with torch.no_grad() :
+        with torch.no_grad():
             for current_batch, (x, y) in enumerate(tqdm_batch):
                 if self.cuda:
                     x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(
@@ -212,16 +236,16 @@ class BaseAgent:
                 if np.isnan(float(cur_loss.item())):
                     raise ValueError('Loss is nan during validation...')
                 epoch_loss.update(cur_loss.item())
-                
-                tped = torch.squeeze(torch.argmax(pred,dim=1,keepdim=True))
+
+                tped = torch.squeeze(torch.argmax(pred, dim=1, keepdim=True))
                 correct.update(
-                    sum(tped==y).cpu() /y.shape[0]
-                    )
+                    sum(tped == y).cpu() / y.shape[0]
+                )
                 dic = {}
-                validation_prediction = np.r_[validation_prediction,tped.cpu().numpy()]
-                validation_target = np.r_[validation_target,y.cpu().numpy()]          
-                               
-                
+                validation_prediction = np.r_[
+                    validation_prediction, tped.cpu().numpy()]
+                validation_target = np.r_[validation_target, y.cpu().numpy()]
+
                 # dic = compute_metrics(output.cpu(), y.detach().cpu(),self.config.num_classes)
                 dic.update({"epoch/validation_loss": epoch_loss.val,
                             "epoch/validation_accuracy": correct.val
@@ -236,9 +260,10 @@ class BaseAgent:
             roc_plot, auc = multi_cls_roc(
                 validation_prediction, validation_target, self.config.num_classes)
             wandb.log({"RocCurves": [plot, roc_plot], "val/Recall": r,
-                    "val/Precision": p, "val/F1": f, "val/mAP": auc})
-            
-            wandb.log({"conf_mat": consusion_matrix(validation_prediction, validation_target)})
+                       "val/Precision": p, "val/F1": f, "val/mAP": auc})
+
+            wandb.log({"conf_mat": consusion_matrix(
+                validation_prediction, validation_target)})
 
         print("Validation results at epoch-" + str(self.current_epoch)
               + " | " + "loss: " + str(epoch_loss.avg)
@@ -296,8 +321,9 @@ class BaseAgent:
         example_rows = 2
         example_cols = 5
         # Get a batch of images and labels
-        sampler = torch.utils.data.DataLoader(self.data_loader.train_dataset,batch_size=example_rows*example_cols, shuffle=True,num_workers=self.config.num_workers)
-        images, indices = next(iter(sampler)) 
+        sampler = torch.utils.data.DataLoader(
+            self.data_loader.train_dataset, batch_size=example_rows*example_cols, shuffle=True, num_workers=self.config.num_workers)
+        images, indices = next(iter(sampler))
         plt.ioff()
         plt.rcParams['figure.dpi'] = 120  # Increase size of pyplot plots
 

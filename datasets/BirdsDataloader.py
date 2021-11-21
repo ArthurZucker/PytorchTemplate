@@ -4,12 +4,12 @@
 import torchvision
 import torchvision.transforms as T
 from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, SubsetRandomSampler
 from torchvision import datasets
 from torchvision.transforms import transforms
 from utils.transforms import SemanticSegmentation
 import torch
-
+import numpy as np
 
 class BirdsDataloader():
     """
@@ -54,6 +54,14 @@ class BirdsDataloader():
             self.config.image_dir + '/val_images', transform=self.transform["val"])
         self.len_train_data = len(self.train_dataset)
         self.len_valid_data = len(self.valid_dataset)
+
+        # num_train = len(self.len_train_data)
+        # indices = list(range(num_train))
+        # np.random.shuffle(indices)
+        # split = int(np.floor(self.len_valid_data  * num_train))
+        # train_idx, valid_idx = indices[split:], indices[:split]
+        # train_sampler = SubsetRandomSampler(train_idx)
+        # valid_sampler = SubsetRandomSampler(valid_idx)
 
         self.train_iterations = (
             self.len_train_data + self.config.batch_size - 1) // self.config.batch_size
