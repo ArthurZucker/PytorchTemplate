@@ -251,6 +251,7 @@ class BaseAgent:
 
         tqdm_batch.close()
 
+
         return correct.val
 
     def test(self):
