@@ -24,13 +24,13 @@ class hparams:
     # Learning rate of the Adam optimizer.
     lr: float = 1e-3
     # batch sier
-    batch_size : int = 8
+    batch_size : int = 4
     # Use cuda for training
     cuda: bool = True
     # Architecture to choose, available are "denet (to come)", "sincnet (to come)", "leaf (to come)", "yolor (to come)"
-    arch: str = "resnet50"
+    arch: str = "Contrastive_vit"
     # Agent to use, the agent has his own trining loop
-    agent: str = "BaseAgent"
+    agent: str = "ContrastiveAgent"
     # Dataset used for training
     dataloader: str = "BirdsDataloader"
     # output file for kaggle
@@ -42,33 +42,36 @@ class hparams:
     # Number of workers used for the dataloader
     num_workers: int  = 16
     # weight_decay
-    weight_decay: float = 0.001
+    weight_decay: float = 0.0001
     # momentum 
-    momentum: float = 0.9
+    momentum: float = 0.8
     # seed
     seed: float = np.random.random()
     # gpu_device
     gpu_device : int = 0
     # optimizer
     optimizer: str = "SGD"
+
     # loss
     loss: str = "CrossEntropy"
     # checkpoint dir
     checkpoint_dir: str = os.path.join(os.getcwd(),"weights/")
     # checkpoint file
-    checkpoint_file: str = ""
+    checkpoint_file: str = "lilac-haze-214_model_best_89.81.pth.tar"#"solar-terrain-177_model_best_87.00.pth.tar"#"faithful-wood-176_model_best_86.00.pth.tar" #pious-dew-166_model_best_97.00.pth.tar" #"devout-planet-34_model_best_95.19.pth.tar"
     # mode
-    mode: str = "test"
+    mode: str = "train"
     # Toggle testing mode, which only runs a few epochs and val
     test_mode: bool = False
     # max epoch tu run
-    max_epoch: int = 100
+    max_epoch: int = 150
     # async_loading
     async_loading: bool = True
     # activation function
     activation: str = "relu"
     # accuracy threshold used for siames network 
     accuracy_threshold: float = 0.5
+    # weighted samplet on dataloaders
+    weighted_sampler: bool = True
     # example of list parameters
     # layer resolutions
     fc_lay: List[int] = list_field(2048, 2048, 2048, 1024, 256, 2)

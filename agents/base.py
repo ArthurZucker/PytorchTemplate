@@ -1,22 +1,26 @@
 """
 The Base Agent class, where all other agents inherit from, that contains definitions for all the necessary functions
 """
+from torchvision import transforms
+from utils.misc import print_cuda_statistics
+from utils.metrics import AverageMeter, consusion_matrix, compute_metrics, multi_cls_accuracy, multi_cls_roc
+from utils.agent_utils import get_loss, get_net, get_optimizer
+from utils.feature_visualization import get_representation
+from tqdm import tqdm
+from torch.optim.lr_scheduler import ExponentialLR
+from torch.autograd import Variable
+from datasets.BirdsDataloader import BirdsDataloader
+from datasets import *
+import wandb
+import torch.nn as nn
+import torch
 import shutil
 from os import path
 
 import numpy as np
-import torch
+np.seterr(divide='ignore', invalid='ignore')
 # visualisation tool
-import wandb
-from datasets import *
-from datasets.BirdsDataloader import BirdsDataloader
-from torch.autograd import Variable
-from torch.optim.lr_scheduler import ExponentialLR
-from tqdm import tqdm
-from utils.agent_utils import get_loss, get_net, get_optimizer
 # import your classes here
-from utils.metrics import AverageMeter, consusion_matrix, compute_metrics, multi_cls_accuracy, multi_cls_roc
-from utils.misc import print_cuda_statistics
 
 
 class BaseAgent:
@@ -26,9 +30,16 @@ class BaseAgent:
 
     def __init__(self, config, run):
         self.config = config
+        self.wb_run = run
         self.model = get_net(config)
         print(self.model)
-        run.watch(self.model)  # run is a wandb instance
+        self.wb_run.watch(self.model)
+        self.activation = np.array([])
+        # avgpool run is a wandb instance
+        self.feature_hook = self.model.net.norm.register_forward_hook(self.getActivation(f'{self.model.net.norm}'))
+        
+        
+        
         self.data_loader = globals()[self.config.dataloader](self.config)
         self.plot_sample_images()
         # define loss
@@ -125,6 +136,7 @@ class BaseAgent:
         Main training loop
         :return:
         """
+
         max_epoch = self.config.max_epoch
         if self.config.test_mode:
             max_epoch = 2
@@ -135,11 +147,19 @@ class BaseAgent:
             self.scheduler.step()
             if epoch % self.config.validate_every == 0:
                 valid_acc = self.validate()
+                get_representation(self.temb,
+                                   self.tpred,
+                                   self.vemb,
+                                   self.vpred
+                                   )
+                self.activation = np.array([])
                 is_best = valid_acc > self.best_valid_acc
                 if is_best:
                     self.best_valid_acc = valid_acc
                 self.save_checkpoint(is_best=is_best)
-
+                self.activation = np.array([])
+        self.feature_hook.remove()
+        
     def train_one_epoch(self):
         """
         One epoch of training
@@ -155,6 +175,7 @@ class BaseAgent:
         self.model.train()
         epoch_loss = AverageMeter()
         correct = AverageMeter()
+        self.tpred = np.array([])
         for current_batch, (x, y) in enumerate(tqdm_batch):
             if self.cuda:
                 x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(
@@ -167,23 +188,32 @@ class BaseAgent:
             cur_loss.backward()
             self.optimizer.step()
             epoch_loss.update(cur_loss.item())
-            tped = torch.squeeze(torch.argmax(pred.detach(),dim=1,keepdim=True))
+            tped = torch.squeeze(torch.argmax(
+                pred.detach(), dim=1, keepdim=True))
             correct.update(
-                sum(tped==y).cpu() /y.shape[0]
+                sum(tped == y).cpu() / y.shape[0]
             )
-            
+
             self.current_iteration += 1
             # logging in wand
             wandb.log({"epoch/loss": epoch_loss.val,
                        "epoch/accuracy": correct.val
                        })
 
+            self.tpred = np.append(self.tpred,tped.cpu().numpy())
+            
             if self.config.test_mode and current_batch == 11:
                 break
-
+            
+            
+            
+        self.temb = self.activation.copy()
+        self.activation = np.array([])
         tqdm_batch.close()
         print("Training at epoch-" + str(self.current_epoch) + " | " + "loss: " + str(
             epoch_loss.val) + "- Top1 Acc: " + str(correct.val))
+        
+        
 
     def validate(self):
         """
@@ -202,7 +232,7 @@ class BaseAgent:
         validation_target = []
         epoch_loss = AverageMeter()
         correct = AverageMeter()
-        with torch.no_grad() :
+        with torch.no_grad():
             for current_batch, (x, y) in enumerate(tqdm_batch):
                 if self.cuda:
                     x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(
@@ -212,16 +242,16 @@ class BaseAgent:
                 if np.isnan(float(cur_loss.item())):
                     raise ValueError('Loss is nan during validation...')
                 epoch_loss.update(cur_loss.item())
-                
-                tped = torch.squeeze(torch.argmax(pred,dim=1,keepdim=True))
+
+                tped = torch.squeeze(torch.argmax(pred, dim=1, keepdim=True))
                 correct.update(
-                    sum(tped==y).cpu() /y.shape[0]
-                    )
+                    sum(tped == y).cpu() / y.shape[0]
+                )
                 dic = {}
-                validation_prediction = np.r_[validation_prediction,tped.cpu().numpy()]
-                validation_target = np.r_[validation_target,y.cpu().numpy()]          
-                               
-                
+                validation_prediction = np.r_[
+                    validation_prediction, tped.cpu().numpy()]
+                validation_target = np.r_[validation_target, y.cpu().numpy()]
+
                 # dic = compute_metrics(output.cpu(), y.detach().cpu(),self.config.num_classes)
                 dic.update({"epoch/validation_loss": epoch_loss.val,
                             "epoch/validation_accuracy": correct.val
@@ -236,9 +266,10 @@ class BaseAgent:
             roc_plot, auc = multi_cls_roc(
                 validation_prediction, validation_target, self.config.num_classes)
             wandb.log({"RocCurves": [plot, roc_plot], "val/Recall": r,
-                    "val/Precision": p, "val/F1": f, "val/mAP": auc})
-            
-            wandb.log({"conf_mat": consusion_matrix(validation_prediction, validation_target)})
+                       "val/Precision": p, "val/F1": f, "val/mAP": auc})
+
+            wandb.log({"conf_mat": consusion_matrix(
+                validation_prediction, validation_target)})
 
         print("Validation results at epoch-" + str(self.current_epoch)
               + " | " + "loss: " + str(epoch_loss.avg)
@@ -248,10 +279,12 @@ class BaseAgent:
               + "\n F1 score \t: " + str(f)
               + "\n mean AP \t: " + str(auc)
               )
-
+        
         tqdm_batch.close()
-
-
+        self.vemb = self.activation.copy()
+        self.vpred = validation_prediction.copy()
+        self.activation = np.array([])
+        
         return correct.val
 
     def test(self):
@@ -297,8 +330,9 @@ class BaseAgent:
         example_rows = 2
         example_cols = 5
         # Get a batch of images and labels
-        sampler = torch.utils.data.DataLoader(self.data_loader.train_dataset,batch_size=example_rows*example_cols, shuffle=True,num_workers=self.config.num_workers)
-        images, indices = next(iter(sampler)) 
+        sampler = torch.utils.data.DataLoader(
+            self.data_loader.train_dataset, batch_size=example_rows*example_cols, shuffle=True, num_workers=self.config.num_workers)
+        images, indices = next(iter(sampler))
         plt.ioff()
         plt.rcParams['figure.dpi'] = 120  # Increase size of pyplot plots
 
@@ -317,6 +351,16 @@ class BaseAgent:
         wandb.log({"Random sample of transformed images": plt})
         plt.close()
 
+    def getActivation(self,name):
+    # the hook signature
+        def hook(model, input, output):
+            to_concatenate = output.detach().cpu().numpy().squeeze()[:,0]
+            if len(self.activation.shape) == 1 : self.activation = to_concatenate
+            else: self.activation = np.append(self.activation,to_concatenate,axis = 0) 
+
+        return hook
+
+        
     def finalize(self):
         """
         Finalizes all the operations of the 2 Main classes of the process, the operator and the data loader

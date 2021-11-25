@@ -4,12 +4,15 @@
 import torchvision
 import torchvision.transforms as T
 from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader, SubsetRandomSampler
+from torch.utils.data import DataLoader, SubsetRandomSampler, ConcatDataset
 from torchvision import datasets
 from torchvision.transforms import transforms
 from utils.transforms import SemanticSegmentation
 import torch
 import numpy as np
+
+from sklearn.model_selection import KFold
+
 
 class BirdsDataloader():
     """
@@ -43,7 +46,7 @@ class BirdsDataloader():
                 transforms.Resize((384, 384)),
                 transforms.ToTensor(),
                 transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225]),
+                                     std=[0.229, 0.224, 0.225]),
             ]
         )
         }
@@ -52,23 +55,51 @@ class BirdsDataloader():
             self.config.image_dir + '/train_images', transform=self.transform["train"])
         self.valid_dataset = datasets.ImageFolder(
             self.config.image_dir + '/val_images', transform=self.transform["val"])
-        self.len_train_data = len(self.train_dataset)
-        self.len_valid_data = len(self.valid_dataset)
+        
+        self.init_data_loaders()
+        #  self.visualize_data()
 
-        # num_train = len(self.len_train_data)
-        # indices = list(range(num_train))
-        # np.random.shuffle(indices)
-        # split = int(np.floor(self.len_valid_data  * num_train))
-        # train_idx, valid_idx = indices[split:], indices[:split]
-        # train_sampler = SubsetRandomSampler(train_idx)
-        # valid_sampler = SubsetRandomSampler(valid_idx)
-
-        self.train_iterations = (
-            self.len_train_data + self.config.batch_size - 1) // self.config.batch_size
-        self.valid_iterations = (
-            self.len_valid_data + self.config.batch_size - 1) // self.config.batch_size
-
-        self.train_loader = DataLoader(
-            self.train_dataset, batch_size=self.config.batch_size, shuffle=True, num_workers=self.config.num_workers)
+    def init_data_loaders(self):
+        """Initialize data_loaders using the defined datasets
+        """
+        if self.config.weighted_sampler:
+            class_sample_count = np.array([len(np.where(self.train_dataset.targets==t)[0]) for t in np.unique(self.train_dataset.targets)])
+            weight = (1 / torch.Tensor(class_sample_count))
+            samples_weight = np.array([weight[t] for t in self.train_dataset.targets])
+            sampler = torch.utils.data.sampler.WeightedRandomSampler(samples_weight, len(samples_weight))
+            self.train_loader = DataLoader(self.train_dataset, batch_size=self.config.batch_size, num_workers=self.config.num_workers,sampler=sampler)
+        
+        else:
+            self.train_loader = DataLoader(
+            self.train_dataset, batch_size=self.config.batch_size, shuffle=True, num_workers=self.config.num_workers,drop_last=True)
         self.valid_loader = DataLoader(
-            self.valid_dataset, batch_size=self.config.batch_size, shuffle=False, num_workers=self.config.num_workers)
+            self.valid_dataset, batch_size=self.config.batch_size, shuffle=False, num_workers=self.config.num_workers,drop_last=True)
+
+        self.train_iterations = len(self.train_loader)
+        self.valid_iterations = len(self.valid_loader)
+
+    def visualize_data(self):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        import pandas as pd
+        import wandb
+        idx2class = {v: k for k, v in self.train_dataset.class_to_idx.items()}
+        def get_class_distribution(dataset_obj):
+            count_dict = {k:0 for k,v in dataset_obj.class_to_idx.items()}
+            
+            for element in dataset_obj:
+                y_lbl = element[1]
+                y_lbl = idx2class[y_lbl]
+                count_dict[y_lbl] += 1
+                    
+            return count_dict
+        
+        plt.figure(figsize=(15,8))
+        plt.ioff()
+        sns.barplot(data = pd.DataFrame.from_dict([get_class_distribution(self.train_dataset)]).melt(), x = "variable", y="value", hue="variable").set_title('Train Class Distribution')
+        plt1 = wandb.Image(plt)
+        plt.figure(figsize=(15,8))
+        sns.barplot(data = pd.DataFrame.from_dict([get_class_distribution(self.valid_dataset)]).melt(), x = "variable", y="value", hue="variable").set_title('Val Images Class Distribution')
+        plt2 = wandb.Image(plt)
+        wandb.log({"Distributions : ": [plt1,plt2]})
+        plt.close()
