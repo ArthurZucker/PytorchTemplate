@@ -18,7 +18,7 @@ class base_dataloader():
 
         print(f"Basic dataloader, data_mode : {args.dataset}, path : {self.config.img_dir}")
         dataset = base_dataset(self.config.img_dir,self.config.annotation_file,self.config.input_dim,self.transform)
-
+            
         train_indices, valid_indices = train_test_split(range(len(dataset)),test_size=self.config.valid_size,train_size=1-self.config.valid_size,
                                                         shuffle=False)
 

@@ -1,44 +1,54 @@
 """
 The Base Agent class, where all other agents inherit from, that contains definitions for all the necessary functions
 """
+from torchvision import transforms
+from utils.misc import print_cuda_statistics
+from utils.metrics import AverageMeter, consusion_matrix, compute_metrics, multi_cls_accuracy, multi_cls_roc
+from utils.agent_utils import get_loss, get_net, get_optimizer
+from utils.feature_visualization import get_representation, plot_contrastive
+from tqdm import tqdm
+from torch.optim.lr_scheduler import ExponentialLR
+from torch.autograd import Variable
+from datasets.BirdsDataloader import BirdsDataloader
+from datasets import *
+import wandb
+import torch.nn as nn
+import torch
 import shutil
+from graphs.losses.Angular import AngularPenaltySMLoss
 from os import path
 
+from graphs.losses import SubcenterArcMarginProduct
+
 import numpy as np
-import torch
-import torch.nn.functional as F
+np.seterr(divide='ignore', invalid='ignore')
 # visualisation tool
-import wandb
-from datasets import *
-from datasets.BirdsDataloader import BirdsDataloader
-from torch.autograd import Variable
-from torch.optim.lr_scheduler import ExponentialLR
-from tqdm import tqdm
-from utils.agent_utils import get_loss, get_net, get_optimizer
 # import your classes here
-from utils.metrics import (AverageMeter, compute_metrics, consusion_matrix,
-                           multi_cls_accuracy, multi_cls_roc)
-from utils.misc import print_cuda_statistics
 
 
-class BaseAgent:
+class ContrastiveAgent:
     """
     This base class will contain the base functions to be overloaded by any agent you will implement.
     """
 
     def __init__(self, config, run):
         self.config = config
+        self.wb_run = run
         self.model = get_net(config)
         print(self.model)
-        run.watch(self.model)  # run is a wandb instance
+        self.wb_run.watch(self.model)
+        self.activation = np.array([])            # run is a wandb instance
+        self.feature_hook = self.model.net.fc.register_forward_hook(self.getActivation(f'{self.model.net.fc}'))
+
         self.data_loader = globals()[self.config.dataloader](self.config)
         self.plot_sample_images()
         # define loss
         self.loss = get_loss(config.loss)
+        self.loss = AngularPenaltySMLoss(self.model.num_ftrs,self.config.num_classes)
 
         # define optimizers for both generator and discriminator
         self.optimizer = get_optimizer(config, self.model)
-        self.scheduler = ExponentialLR(self.optimizer, gamma=0.9)
+        self.scheduler = ExponentialLR(self.optimizer, gamma=0.8)
         # initialize counter
         self.current_epoch = 0
         self.current_iteration = 0
@@ -78,8 +88,11 @@ class BaseAgent:
 
             self.current_epoch = checkpoint['epoch']
             self.current_iteration = checkpoint['iteration']
-            self.model.load_state_dict(checkpoint['state_dict'])
-            self.optimizer.load_state_dict(checkpoint['optimizer'])
+            self.model.load_state_dict(checkpoint['state_dict'],strict=False )
+            # self.loss.load_state_dict(checkpoint['loss'])
+
+            
+            # self.optimizer.load_state_dict(checkpoint['optimizer'])
 
             print("Checkpoint loaded successfully from '{}' at (epoch {}) at (iteration {})\n"
                   .format(self.config.checkpoint_dir, checkpoint['epoch'], checkpoint['iteration']))
@@ -100,13 +113,14 @@ class BaseAgent:
             'iteration': self.current_iteration,
             'state_dict': self.model.state_dict(),
             'optimizer': self.optimizer.state_dict(),
+            'loss': self.loss.state_dict(),
         }
         # Save the state
         torch.save(state, self.config.checkpoint_dir + filename)
         # If it is the best copy it to another file 'model_best.pth.tar'
         if is_best:
             shutil.copyfile(self.config.checkpoint_dir + "/" + filename,
-                            self.config.checkpoint_dir + "/" + f'{wandb.run.name}_model_best_{self.best_valid_acc.numpy()*100:.2f}.pth.tar')
+                            self.config.checkpoint_dir + "/" + f'{wandb.run.name}_model_best_{self.best_valid_acc*100:.2f}.pth.tar')
 
     def run(self):
         """
@@ -127,6 +141,7 @@ class BaseAgent:
         Main training loop
         :return:
         """
+
         max_epoch = self.config.max_epoch
         if self.config.test_mode:
             max_epoch = 2
@@ -137,11 +152,24 @@ class BaseAgent:
             self.scheduler.step()
             if epoch % self.config.validate_every == 0:
                 valid_acc = self.validate()
+                get_representation(self.temb,
+                                   self.tpred,
+                                   self.vemb,
+                                   self.vpred
+                                   )
+                plot_contrastive(self.temb,
+                                   self.tpred,
+                                   self.vemb,
+                                   self.vpred
+                                   )
+                self.activation = np.array([])
                 is_best = valid_acc > self.best_valid_acc
                 if is_best:
                     self.best_valid_acc = valid_acc
                 self.save_checkpoint(is_best=is_best)
-
+                self.activation = np.array([])
+        self.feature_hook.remove()
+        
     def train_one_epoch(self):
         """
         One epoch of training
@@ -157,44 +185,25 @@ class BaseAgent:
         self.model.train()
         epoch_loss = AverageMeter()
         correct = AverageMeter()
-
-        for current_batch, img_triplet in enumerate(tqdm_batch):
-            anchor_img, pos_img, neg_img = img_triplet
-
+        self.tpred = np.array([])
+        for current_batch, (x, y) in enumerate(tqdm_batch):
             if self.cuda:
-                anchor_img, pos_img, neg_img = anchor_img.cuda(
-                    non_blocking=self.config.async_loading),
-                pos_img.cuda(non_blocking=self.config.async_loading), neg_img.cuda(
+                x, y = x.cuda(non_blocking=self.config.async_loading), y.cuda(
                     non_blocking=self.config.async_loading)
-            # extract deep embeddings
-            E1, E2, E3 = self.model(anchor_img, pos_img, neg_img)
-
-            dist_E1_E2 = F.pairwise_distance(E1, E2, 2)
-            dist_E1_E3 = F.pairwise_distance(E1, E3, 2)
-
-            target = torch.FloatTensor(dist_E1_E2.size()).fill_(-1)
-            target = target.cuda(non_blocking=self.config.async_loading)
-
-            cur_loss = self.loss(dist_E1_E2, dist_E1_E3, target)
-
+            self.optimizer.zero_grad()
+            pred = self.model(x)
+            cur_loss = self.loss(pred, y)
+            pred = self.loss.pred
             if np.isnan(float(cur_loss.item())):
                 raise ValueError('Loss is nan during training...')
-
-            self.optimizer.zero_grad()
             cur_loss.backward()
             self.optimizer.step()
-
             epoch_loss.update(cur_loss.item())
-
-            prediction = (dist_E1_E3 - dist_E1_E2 - self.config.margin *
-                          self.config.accuracy_threshold).cpu().data
-            prediction = prediction.view(prediction.numel())
-            prediction = (prediction > 0).float()
-            batch_acc = prediction.sum() * 1.0 / prediction.numel()
-
             tped = torch.squeeze(torch.argmax(
                 pred.detach(), dim=1, keepdim=True))
-            correct.update(batch_acc)
+            correct.update(
+                sum(tped == y).cpu() / y.shape[0]
+            )
 
             self.current_iteration += 1
             # logging in wand
@@ -202,12 +211,20 @@ class BaseAgent:
                        "epoch/accuracy": correct.val
                        })
 
+            self.tpred = np.append(self.tpred,tped.cpu().numpy())
+            
             if self.config.test_mode and current_batch == 11:
                 break
-
+            
+            
+            
+        self.temb = self.activation.copy()
+        self.activation = np.array([])
         tqdm_batch.close()
         print("Training at epoch-" + str(self.current_epoch) + " | " + "loss: " + str(
             epoch_loss.val) + "- Top1 Acc: " + str(correct.val))
+        
+        
 
     def validate(self):
         """
@@ -233,6 +250,7 @@ class BaseAgent:
                         non_blocking=self.config.async_loading)
                 pred = self.model(x)
                 cur_loss = self.loss(pred, y)
+                pred = self.loss.pred
                 if np.isnan(float(cur_loss.item())):
                     raise ValueError('Loss is nan during validation...')
                 epoch_loss.update(cur_loss.item())
@@ -273,10 +291,13 @@ class BaseAgent:
               + "\n F1 score \t: " + str(f)
               + "\n mean AP \t: " + str(auc)
               )
-
+        
         tqdm_batch.close()
-
-        return correct.val
+        self.vemb = self.activation.copy()
+        self.vpred = validation_prediction.copy()
+        self.activation = np.array([])
+        
+        return auc #correct.val
 
     def test(self):
         import PIL.Image as Image
@@ -287,7 +308,9 @@ class BaseAgent:
                     return img.convert('RGB')
 
         # set the model in training mode
+
         self.model.eval()
+        
         output_file = open(self.config.outfile, "w")
         output_file.write("Id,Category\n")
         torch.no_grad()
@@ -298,9 +321,10 @@ class BaseAgent:
                 data = data.view(1, data.size(0), data.size(1), data.size(2))
                 if self.cuda:
                     data = data.cuda()
-                output = self.model(data)
-                pred = output.data.max(1, keepdim=True)[1]
-                output_file.write("%s,%d\n" % (f[:-4], pred))
+                output = self.model.net(data)
+                logit = self.loss(output, None)
+                pred = torch.argmax(logit)
+                output_file.write("%s,%d\n" % (f[:-4], pred.data.cpu()))
         output_file.close()
 
         print("Succesfully wrote " + self.config.outfile +
@@ -342,6 +366,16 @@ class BaseAgent:
         wandb.log({"Random sample of transformed images": plt})
         plt.close()
 
+    def getActivation(self,name):
+    # the hook signature
+        def hook(model, input, output):
+            to_concatenate = torch.nn.functional.normalize(output.detach().cpu()).numpy().squeeze()
+            if len(self.activation.shape) == 1 : self.activation = to_concatenate
+            else: self.activation = np.append(self.activation,to_concatenate,axis = 0) 
+
+        return hook
+
+        
     def finalize(self):
         """
         Finalizes all the operations of the 2 Main classes of the process, the operator and the data loader

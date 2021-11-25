@@ -61,8 +61,7 @@ def get_optimizer(args, net):
     elif args.optimizer == 'Adam':
         optimizer = optim.Adam(param_groups,
                                lr=args.lr,
-                               weight_decay=args.weight_decay,
-                               amsgrad=args.amsgrad)
+                               weight_decay=args.weight_decay)
     elif args.optimizer == "Rmsprop":
         optimizer = optim.RMSprop(param_groups,
                                   lr=args.lr,alpha=0.95,eps=1e-8)
