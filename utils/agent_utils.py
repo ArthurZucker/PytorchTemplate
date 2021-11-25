@@ -1,6 +1,7 @@
 from torch import nn
 import importlib
 from torch import optim
+from torch.nn import MarginRankingLoss
 
 """
 Get loss function from str parameter
@@ -65,7 +66,8 @@ def get_optimizer(args, net):
     elif args.optimizer == "Rmsprop":
         optimizer = optim.RMSprop(param_groups,
                                   lr=args.lr,alpha=0.95,eps=1e-8)
-
+    elif args.optimizer =="MarginRankingLoss":
+       optimizer = MarginRankingLoss(margin=args.margin)
     else:
         raise ValueError('Not a valid optimizer')
 
